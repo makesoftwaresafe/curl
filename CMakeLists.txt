@@ -352,7 +352,6 @@ if(ENABLE_ARES)
   if(CARES_CFLAGS)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CARES_CFLAGS}")
   endif()
-  add_definitions("-DCARES_NO_DEPRECATED")  # Ignore c-ares deprecation warnings
 endif()
 
 include(CurlSymbolHiding)
@@ -778,6 +777,9 @@ if(CURL_USE_OPENSSL)
     set(_openssl "AmiSSL")
   else()
     set(_openssl "OpenSSL")
+    if(OPENSSL_VERSION VERSION_LESS 1.1.1)
+      message(WARNING "OpenSSL ${OPENSSL_VERSION} does not support TLS 1.3.")
+    endif()
   endif()
 endif()
 
@@ -1765,8 +1767,8 @@ endif()
 if(APPLE)
   check_function_exists("mach_absolute_time" HAVE_MACH_ABSOLUTE_TIME)
 endif()
-check_symbol_exists("inet_ntop" "${CURL_INCLUDES};stdlib.h;string.h" HAVE_INET_NTOP)  # arpa/inet.h
-check_symbol_exists("inet_pton" "${CURL_INCLUDES};stdlib.h;string.h" HAVE_INET_PTON)  # arpa/inet.h
+check_symbol_exists("inet_ntop" "${CURL_INCLUDES};stdlib.h;string.h" HAVE_INET_NTOP)  # arpa/inet.h netinet/in.h sys/socket.h
+check_symbol_exists("inet_pton" "${CURL_INCLUDES};stdlib.h;string.h" HAVE_INET_PTON)  # arpa/inet.h netinet/in.h sys/socket.h
 
 check_symbol_exists("fsetxattr" "sys/xattr.h" HAVE_FSETXATTR)
 if(HAVE_FSETXATTR)
