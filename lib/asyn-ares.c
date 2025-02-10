@@ -62,10 +62,6 @@
 #include "httpsrr.h"
 #include "strdup.h"
 
-#if defined(CURL_STATICLIB) && !defined(CARES_STATICLIB) &&   \
-  defined(_WIN32)
-#  define CARES_STATICLIB
-#endif
 #include <ares.h>
 #include <ares_version.h> /* really old c-ares did not include this by
                              itself */
@@ -112,6 +108,9 @@ int Curl_ares_perform(ares_channel channel,
   struct pollfd pfd[ARES_GETSOCK_MAXNUM];
   int i;
   int num = 0;
+
+  if(!channel)
+    return 0;
 
   bitmask = ares_getsock(channel, socks, ARES_GETSOCK_MAXNUM);
 
