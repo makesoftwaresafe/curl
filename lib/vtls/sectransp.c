@@ -211,9 +211,6 @@ static const uint16_t default_ciphers[] = {
 #endif /* CURL_BUILD_MAC_10_13 || CURL_BUILD_IOS_11 */
 };
 
-#define DEFAULT_CIPHERS_LEN sizeof(default_ciphers)/sizeof(default_ciphers[0])
-
-
 /* pinned public key support tests */
 
 /* version 1 supports macOS 10.12+ and iOS 10+ */
@@ -925,7 +922,7 @@ static CURLcode sectransp_set_default_ciphers(struct Curl_easy *data,
   /* Intersect the ciphers supported by Secure Transport with the default
    * ciphers, using the order of the former. */
   for(i = 0; i < supported_len; i++) {
-    for(j = 0; j < DEFAULT_CIPHERS_LEN; j++) {
+    for(j = 0; j < CURL_ARRAYSIZE(default_ciphers); j++) {
       if(default_ciphers[j] == ciphers[i]) {
         ciphers[count++] = ciphers[i];
         break;
@@ -2290,15 +2287,12 @@ static CURLcode sectransp_connect_step3(struct Curl_cfilter *cf,
   return CURLE_OK;
 }
 
-static CURLcode
-sectransp_connect_common(struct Curl_cfilter *cf, struct Curl_easy *data,
-                         bool nonblocking,
-                         bool *done)
+static CURLcode sectransp_connect(struct Curl_cfilter *cf,
+                                  struct Curl_easy *data,
+                                  bool *done)
 {
   CURLcode result;
   struct ssl_connect_data *connssl = cf->ctx;
-  curl_socket_t sockfd = Curl_conn_cf_get_socket(cf, data);
-  int what;
 
   /* check if the connection has already been established */
   if(ssl_connection_complete == connssl->state) {
@@ -2306,73 +2300,20 @@ sectransp_connect_common(struct Curl_cfilter *cf, struct Curl_easy *data,
     return CURLE_OK;
   }
 
+  *done = FALSE;
+  connssl->io_need = CURL_SSL_IO_NEED_NONE;
+
   if(ssl_connect_1 == connssl->connecting_state) {
-    /* Find out how much more time we are allowed */
-    const timediff_t timeout_ms = Curl_timeleft(data, NULL, TRUE);
-
-    if(timeout_ms < 0) {
-      /* no need to continue if time already is up */
-      failf(data, "SSL connection timeout");
-      return CURLE_OPERATION_TIMEDOUT;
-    }
-
     result = sectransp_connect_step1(cf, data);
     if(result)
       return result;
   }
 
-  while(ssl_connect_2 == connssl->connecting_state) {
-
-    /* check allowed time left */
-    const timediff_t timeout_ms = Curl_timeleft(data, NULL, TRUE);
-
-    if(timeout_ms < 0) {
-      /* no need to continue if time already is up */
-      failf(data, "SSL connection timeout");
-      return CURLE_OPERATION_TIMEDOUT;
-    }
-
-    /* if ssl is expecting something, check if it is available. */
-    if(connssl->io_need) {
-
-      curl_socket_t writefd = (connssl->io_need & CURL_SSL_IO_NEED_SEND) ?
-        sockfd : CURL_SOCKET_BAD;
-      curl_socket_t readfd = (connssl->io_need & CURL_SSL_IO_NEED_RECV) ?
-        sockfd : CURL_SOCKET_BAD;
-
-      what = Curl_socket_check(readfd, CURL_SOCKET_BAD, writefd,
-                               nonblocking ? 0 : timeout_ms);
-      if(what < 0) {
-        /* fatal error */
-        failf(data, "select/poll on SSL socket, errno: %d", SOCKERRNO);
-        return CURLE_SSL_CONNECT_ERROR;
-      }
-      else if(0 == what) {
-        if(nonblocking) {
-          *done = FALSE;
-          return CURLE_OK;
-        }
-        else {
-          /* timeout */
-          failf(data, "SSL connection timeout");
-          return CURLE_OPERATION_TIMEDOUT;
-        }
-      }
-      /* socket is readable or writable */
-    }
-
-    /* Run transaction, and return to the caller if it failed or if this
-     * connection is done nonblocking and this loop would execute again. This
-     * permits the owner of a multi handle to abort a connection attempt
-     * before step2 has completed while ensuring that a client using select()
-     * or epoll() will always have a valid fdset to wait on.
-     */
+  if(ssl_connect_2 == connssl->connecting_state) {
     result = sectransp_connect_step2(cf, data);
-    if(result || (nonblocking && (ssl_connect_2 == connssl->connecting_state)))
+    if(result)
       return result;
-
-  } /* repeat step2 until all transactions are done. */
-
+  }
 
   if(ssl_connect_3 == connssl->connecting_state) {
     result = sectransp_connect_step3(cf, data);
@@ -2385,34 +2326,6 @@ sectransp_connect_common(struct Curl_cfilter *cf, struct Curl_easy *data,
     connssl->state = ssl_connection_complete;
     *done = TRUE;
   }
-  else
-    *done = FALSE;
-
-  /* Reset our connect state machine */
-  connssl->connecting_state = ssl_connect_1;
-
-  return CURLE_OK;
-}
-
-static CURLcode sectransp_connect_nonblocking(struct Curl_cfilter *cf,
-                                              struct Curl_easy *data,
-                                              bool *done)
-{
-  return sectransp_connect_common(cf, data, TRUE, done);
-}
-
-static CURLcode sectransp_connect(struct Curl_cfilter *cf,
-                                  struct Curl_easy *data)
-{
-  CURLcode result;
-  bool done = FALSE;
-
-  result = sectransp_connect_common(cf, data, FALSE, &done);
-
-  if(result)
-    return result;
-
-  DEBUGASSERT(done);
 
   return CURLE_OK;
 }
@@ -2757,7 +2670,6 @@ const struct Curl_ssl Curl_ssl_sectransp = {
   sectransp_random,                   /* random */
   NULL,                               /* cert_status_request */
   sectransp_connect,                  /* connect */
-  sectransp_connect_nonblocking,      /* connect_nonblocking */
   Curl_ssl_adjust_pollset,            /* adjust_pollset */
   sectransp_get_internals,            /* get_internals */
   sectransp_close,                    /* close_one */
