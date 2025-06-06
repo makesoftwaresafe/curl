@@ -218,7 +218,7 @@ struct OperationConfig {
   long retry_delay;         /* delay between retries (in seconds) */
   long retry_maxtime;       /* maximum time to keep retrying */
 
-  long mime_options;        /* Mime option flags. */
+  unsigned long mime_options; /* Mime option flags. */
   long tftp_blksize;        /* TFTP BLKSIZE option */
   long alivetime;           /* keepalive-time */
   long alivecnt;            /* keepalive-cnt */
@@ -231,8 +231,6 @@ struct OperationConfig {
   long proxyver;             /* set to CURLPROXY_HTTP* define */
   int ftp_ssl_ccc_mode;
   int ftp_filemethod;
-  int default_node_flags;   /* default flags to search for each 'node', which
-                               is basically each given URL to transfer */
   enum {
     CLOBBER_DEFAULT, /* Provides compatibility with previous versions of curl,
                         by using the default behavior for -o, -O, and -J.
@@ -244,6 +242,7 @@ struct OperationConfig {
   } file_clobber_mode;
   unsigned char upload_flags; /* Bitmask for --upload-flags */
   unsigned short porttouse;
+  BIT(remote_name_all);   /* --remote-name-all */
   BIT(remote_time);
   BIT(cookiesession);       /* new session? */
   BIT(encoding);            /* Accept-Encoding please */
