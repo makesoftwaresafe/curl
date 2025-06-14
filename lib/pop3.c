@@ -726,11 +726,8 @@ static CURLcode pop3_perform_authentication(struct Curl_easy *data,
     if(pop3c->authtypes & pop3c->preftype & POP3_TYPE_CLEARTEXT)
       /* Perform clear text authentication */
       result = pop3_perform_user(data, conn);
-    else {
-      /* Other mechanisms not supported */
-      infof(data, "No known authentication mechanisms supported");
-      result = CURLE_LOGIN_DENIED;
-    }
+    else
+      result = Curl_sasl_is_blocked(&pop3c->sasl, data);
   }
 
   return result;
@@ -877,7 +874,7 @@ static CURLcode pop3_state_capa_resp(struct Curl_easy *data, int pop3code,
   line = curlx_dyn_ptr(&pop3c->pp.recvbuf);
   len = pop3c->pp.nfinal;
 
-  /* Do we have a untagged continuation response? */
+  /* Do we have an untagged continuation response? */
   if(pop3code == '*') {
     /* Does the server support the STLS capability? */
     if(len >= 4 && !memcmp(line, "STLS", 4))
@@ -1453,16 +1450,14 @@ static CURLcode pop3_disconnect(struct Curl_easy *data,
      bad in any way, sending quit and waiting around here will make the
      disconnect wait in vain and cause more problems than we need to. */
 
-  if(!dead_connection && conn->bits.protoconnstart) {
+  if(!dead_connection && conn->bits.protoconnstart &&
+     !Curl_pp_needs_flush(data, &pop3c->pp)) {
     if(!pop3_perform_quit(data, conn))
       (void)pop3_block_statemach(data, conn, TRUE); /* ignore errors on QUIT */
   }
 
   /* Disconnect from the server */
   Curl_pp_disconnect(&pop3c->pp);
-
-  /* Cleanup the SASL module */
-  Curl_sasl_cleanup(conn, pop3c->sasl.authused);
 
   /* Cleanup our connection based variables */
   Curl_safefree(pop3c->apoptimestamp);

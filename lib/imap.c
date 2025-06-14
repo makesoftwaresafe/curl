@@ -723,11 +723,8 @@ static CURLcode imap_perform_authentication(struct Curl_easy *data,
     else if(!imapc->login_disabled && (imapc->preftype & IMAP_TYPE_CLEARTEXT))
       /* Perform clear text authentication */
       result = imap_perform_login(data, imapc, data->conn);
-    else {
-      /* Other mechanisms not supported */
-      infof(data, "No known authentication mechanisms supported");
-      result = CURLE_LOGIN_DENIED;
-    }
+    else
+      result = Curl_sasl_is_blocked(&imapc->sasl, data);
   }
 
   return result;
@@ -1035,7 +1032,7 @@ static CURLcode imap_state_capability_resp(struct Curl_easy *data,
 
   (void)instate; /* no use for this yet */
 
-  /* Do we have a untagged response? */
+  /* Do we have an untagged response? */
   if(imapcode == '*') {
     line += 2;
 
@@ -1783,18 +1780,14 @@ static CURLcode imap_disconnect(struct Curl_easy *data,
   (void)data;
   if(imapc) {
     /* We cannot send quit unconditionally. If this connection is stale or
-       bad in any way, sending quit and waiting around here will make the
+       bad in any way (pingpong has pending data to send),
+       sending quit and waiting around here will make the
        disconnect wait in vain and cause more problems than we need to. */
-
-    /* The IMAP session may or may not have been allocated/setup at this
-       point! */
-    if(!dead_connection && conn->bits.protoconnstart) {
+    if(!dead_connection && conn->bits.protoconnstart &&
+       !Curl_pp_needs_flush(data, &imapc->pp)) {
       if(!imap_perform_logout(data, imapc))
         (void)imap_block_statemach(data, imapc, TRUE); /* ignore errors */
     }
-
-    /* Cleanup the SASL module */
-    Curl_sasl_cleanup(conn, imapc->sasl.authused);
   }
   return CURLE_OK;
 }

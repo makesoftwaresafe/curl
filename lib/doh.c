@@ -377,8 +377,6 @@ static CURLcode doh_probe_run(struct Curl_easy *data,
      options should be added to check doh proxy insecure separately,
      CURLOPT_DOH_PROXY_SSL_VERIFYHOST and CURLOPT_DOH_PROXY_SSL_VERIFYPEER.
      */
-  if(data->set.ssl.falsestart)
-    ERROR_CHECK_SETOPT(CURLOPT_SSL_FALSESTART, 1L);
   if(data->set.str[STRING_SSL_CAFILE]) {
     ERROR_CHECK_SETOPT(CURLOPT_CAINFO,
                        data->set.str[STRING_SSL_CAFILE]);
@@ -410,23 +408,8 @@ static CURLcode doh_probe_run(struct Curl_easy *data,
                        data->set.str[STRING_SSL_EC_CURVES]);
   }
 
-  {
-    long mask =
-      (data->set.ssl.enable_beast ?
-       CURLSSLOPT_ALLOW_BEAST : 0) |
-      (data->set.ssl.no_revoke ?
-       CURLSSLOPT_NO_REVOKE : 0) |
-      (data->set.ssl.no_partialchain ?
-       CURLSSLOPT_NO_PARTIALCHAIN : 0) |
-      (data->set.ssl.revoke_best_effort ?
-       CURLSSLOPT_REVOKE_BEST_EFFORT : 0) |
-      (data->set.ssl.native_ca_store ?
-       CURLSSLOPT_NATIVE_CA : 0) |
-      (data->set.ssl.auto_client_cert ?
-       CURLSSLOPT_AUTO_CLIENT_CERT : 0);
-
-    (void)curl_easy_setopt(doh, CURLOPT_SSL_OPTIONS, mask);
-  }
+  (void)curl_easy_setopt(doh, CURLOPT_SSL_OPTIONS,
+                         (long)data->set.ssl.primary.ssl_options);
 
   doh->state.internal = TRUE;
   doh->master_mid = data->mid; /* master transfer of this one */
@@ -936,7 +919,7 @@ static void doh_show(struct Curl_easy *data,
  * This function returns a pointer to the first element of a newly allocated
  * Curl_addrinfo struct linked list filled with the data from a set of DoH
  * lookups. Curl_addrinfo is meant to work like the addrinfo struct does for
- * a IPv6 stack, but usable also for IPv4, all hosts and environments.
+ * an IPv6 stack, but usable also for IPv4, all hosts and environments.
  *
  * The memory allocated by this function *MUST* be free'd later on calling
  * Curl_freeaddrinfo(). For each successful call to this function there
