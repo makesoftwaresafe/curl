@@ -24,16 +24,15 @@
 #include "test.h"
 
 #include "testutil.h"
-#include "warnless.h"
 
 #define NUM_THREADS 100
 
 #ifdef _WIN32
 #if defined(CURL_WINDOWS_UWP) || defined(UNDER_CE)
-static DWORD WINAPI run_thread(LPVOID ptr)
+static DWORD WINAPI t3026_run_thread(LPVOID ptr)
 #else
 #include <process.h>
-static unsigned int WINAPI run_thread(void *ptr)
+static unsigned int WINAPI t3026_run_thread(void *ptr)
 #endif
 {
   CURLcode *result = ptr;
@@ -45,7 +44,7 @@ static unsigned int WINAPI run_thread(void *ptr)
   return 0;
 }
 
-CURLcode test(char *URL)
+static CURLcode test_lib3026(char *URL)
 {
 #if defined(CURL_WINDOWS_UWP) || defined(UNDER_CE)
   typedef HANDLE curl_win_thread_handle_t;
@@ -67,21 +66,13 @@ CURLcode test(char *URL)
     return TEST_ERR_MAJOR_BAD;
   }
 
-  /* On Windows libcurl global init/cleanup calls LoadLibrary/FreeLibrary for
-     secur32.dll and iphlpapi.dll. Here we load them beforehand so that when
-     libcurl calls LoadLibrary/FreeLibrary it only increases/decreases the
-     library's refcount rather than actually loading/unloading the library,
-     which would affect the test runtime. */
-  (void)win32_load_system_library(TEXT("secur32.dll"));
-  (void)win32_load_system_library(TEXT("iphlpapi.dll"));
-
   for(i = 0; i < tid_count; i++) {
     curl_win_thread_handle_t th;
     results[i] = CURL_LAST; /* initialize with invalid value */
 #if defined(CURL_WINDOWS_UWP) || defined(UNDER_CE)
-    th = CreateThread(NULL, 0, run_thread, &results[i], 0, NULL);
+    th = CreateThread(NULL, 0, t3026_run_thread, &results[i], 0, NULL);
 #else
-    th = _beginthreadex(NULL, 0, run_thread, &results[i], 0, NULL);
+    th = _beginthreadex(NULL, 0, t3026_run_thread, &results[i], 0, NULL);
 #endif
     if(!th) {
       curl_mfprintf(stderr, "%s:%d Couldn't create thread, errno %lu\n",
@@ -112,7 +103,7 @@ cleanup:
 #include <pthread.h>
 #include <unistd.h>
 
-static void *run_thread(void *ptr)
+static void *t3026_run_thread(void *ptr)
 {
   CURLcode *result = ptr;
 
@@ -123,7 +114,7 @@ static void *run_thread(void *ptr)
   return NULL;
 }
 
-CURLcode test(char *URL)
+static CURLcode test_lib3026(char *URL)
 {
   CURLcode results[NUM_THREADS];
   pthread_t tids[NUM_THREADS];
@@ -143,7 +134,7 @@ CURLcode test(char *URL)
   for(i = 0; i < tid_count; i++) {
     int res;
     results[i] = CURL_LAST; /* initialize with invalid value */
-    res = pthread_create(&tids[i], NULL, run_thread, &results[i]);
+    res = pthread_create(&tids[i], NULL, t3026_run_thread, &results[i]);
     if(res) {
       curl_mfprintf(stderr, "%s:%d Couldn't create thread, errno %d\n",
                     __FILE__, __LINE__, res);
@@ -168,7 +159,7 @@ cleanup:
 }
 
 #else /* without pthread or Windows, this test doesn't work */
-CURLcode test(char *URL)
+static CURLcode test_lib3026(char *URL)
 {
   curl_version_info_data *ver;
   (void)URL;
